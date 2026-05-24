@@ -1,122 +1,44 @@
 import os
 import re
-from pathlib import Path
+import subprocess
 
+BASE_DIR = r"C:\Users\LENOVO\Desktop\kamu-ihale-ai"
+INPUT_DIR = os.path.join(BASE_DIR, "data", "cleaned")
+OUTPUT_DIR = os.path.join(BASE_DIR, "data", "normalized")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-INPUT = r"C:\Users\LENOVO\Desktop\kamu-ihale-ai\data\cleaned"
-OUTPUT = r"C:\Users\LENOVO\Desktop\kamu-ihale-ai\data\normalized"
+def github_push(commit_mesaji, dosya_yolu):
+    try:
+        os.chdir(BASE_DIR)
+        subprocess.run(["git", "add", dosya_yolu], check=True)
+        subprocess.run(["git", "commit", "-m", commit_mesaji], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+        print(f"[GITHUB] {dosya_yolu} başarıyla GitHub'a gönderildi!")
+    except Exception as e:
+        print("[GITHUB HATA] Kod GitHub'a gönderilemedi:", e)
 
+def normalize_text():
+    files = [f for f in os.listdir(INPUT_DIR) if f.endswith(".txt")]
+    if not files:
+        print("[UYARI] Temizlenecek ham kaynak txt dosyası bulunamadı!")
+        return
 
-def normalize(text):
-
-    # Başlık sonu temizle
-    text = re.sub(
-        r"\s*\|\s*KİK Kararı Analizi",
-        "",
-        text
-    )
-
-    # Tekrarlı başlığı kaldır
-    satirlar = []
-
-    gorulen = set()
-
-    for s in text.split("\n"):
-
-        s = s.strip()
-
-        if not s:
-            continue
-
-        if s in gorulen and len(s) > 20:
-            continue
-
-        satirlar.append(s)
-
-        gorulen.add(s)
-
-    text = "\n".join(satirlar)
-
-    # Dayanak bloklaştır
-    text = re.sub(
-        r"\nDayanaklar\s*\n",
-        "\n\n[DAYANAK]\n",
-        text,
-        flags=re.IGNORECASE
-    )
-
-    # Sonuna blok kapat
-    if "[DAYANAK]" in text:
-        text += "\n[/DAYANAK]"
-
-    # Fazla boşluk
-    text = re.sub(
-        r"\n{3,}",
-        "\n\n",
-        text
-    )
-
-    return text.strip()
-
-
-def main():
-
-    files = [
-        f
-        for f in os.listdir(INPUT)
-        if f.endswith(".txt")
-    ]
-
-    print("Dosya:", len(files))
-
-    for f in files:
-
-        try:
-
-            p = os.path.join(
-                INPUT,
-                f
-            )
-
-            with open(
-                p,
-                "r",
-                encoding="utf-8"
-            ) as file:
-
-                text = file.read()
-
-            sonuc = normalize(text)
-
-            out = (
-                Path(OUTPUT)
-                /
-                f
-            )
-
-            with open(
-                out,
-                "w",
-                encoding="utf-8"
-            ) as w:
-
-                w.write(
-                    sonuc
-                )
-
-            print(
-                "OK:",
-                f
-            )
-
-        except Exception as e:
-
-            print(
-                "HATA:",
-                f,
-                e
-            )
-
+    print(f"[BİLGİ] {len(files)} dosya üzerinde metin normalizasyonu yapılıyor...")
+    
+    for file in files:
+        with open(os.path.join(INPUT_DIR, file), "r", encoding="utf-8") as f:
+            text = f.read()
+            
+        # Çoklu satır boşluklarını tek satıra indirger
+        text = re.sub(r'\n\s*\n', '\n', text)
+        # Birden fazla yan yana boşluğu tek boşluk yapar
+        text = re.sub(r' +', ' ', text)
+        
+        with open(os.path.join(OUTPUT_DIR, file), "w", encoding="utf-8") as f:
+            f.write(text.strip())
+            
+    print("\n[AŞAMA 2 TAMAM] Tüm metinler normalize edildi.")
 
 if __name__ == "__main__":
-    main()
+    normalize_text()
+    github_push("Asama 2: Metin temizleme ve normalizasyon kodu eklendi", "scripts/02_normalize_text.py")
