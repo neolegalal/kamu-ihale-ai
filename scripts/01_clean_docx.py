@@ -1,118 +1,56 @@
 import os
-import re
-from pathlib import Path
-from docx import Document
+import subprocess
+import sys
 
+# Gerekli docx kütüphanesini otomatik yükle
+try:
+    from docx import Document
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "python-docx"])
+    from docx import Document
 
-RAW = r"C:\Users\LENOVO\Desktop\kamu-ihale-ai\data\raw"
-CLEAN = r"C:\Users\LENOVO\Desktop\kamu-ihale-ai\data\cleaned"
+BASE_DIR = r"C:\Users\LENOVO\Desktop\kamu-ihale-ai"
+INPUT_DIR = os.path.join(BASE_DIR, "data", "raw")
+OUTPUT_DIR = os.path.join(BASE_DIR, "data", "cleaned")
 
+# Klasörleri otomatik oluştur
+os.makedirs(INPUT_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def read_docx(path):
+def github_push(commit_mesaji, dosya_yolu):
+    try:
+        os.chdir(BASE_DIR)
+        subprocess.run(["git", "add", dosya_yolu], check=True)
+        subprocess.run(["git", "commit", "-m", commit_mesaji], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+        print(f"[GITHUB] {dosya_yolu} başarıyla GitHub'a gönderildi!")
+    except Exception as e:
+        print("[GITHUB HATA] Kod GitHub'a gönderilemedi:", e)
 
-    doc = Document(path)
+def docx_to_text():
+    files = [f for f in os.listdir(INPUT_DIR) if f.endswith(".docx")]
+    if not files:
+        print(f"[UYARI] {INPUT_DIR} klasöründe işlenecek .docx dosyası bulunamadı!")
+        return
 
-    parts = []
-
-    for p in doc.paragraphs:
-
-        t = p.text.strip()
-
-        if t:
-            parts.append(t)
-
-    return "\n".join(parts)
-
-
-def clean_text(text):
-
-    sil = [
-        r"Başlıksız Yazı",
-        r"✍️.*",
-        r"NeoLegalAI.*",
-        r"𝕏:.*",
-        r"Kamu İhale Hukuku Analizleri.*"
-    ]
-
-    for s in sil:
-        text = re.sub(s, "", text)
-
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    satirlar = []
-
-    onceki = ""
-
-    for s in text.split("\n"):
-
-        s = s.strip()
-
-        if not s:
-            continue
-
-        if s == onceki:
-            continue
-
-        satirlar.append(s)
-
-        onceki = s
-
-    return "\n".join(satirlar)
-
-
-def save_txt(name, text):
-
-    hedef = Path(CLEAN) / (Path(name).stem + ".txt")
-
-    with open(
-        hedef,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        f.write(text)
-
-
-def main():
-
-    files = [
-        f
-        for f in os.listdir(RAW)
-        if (
-            f.endswith(".docx")
-            and
-            not f.startswith("~$")
-        )
-    ]
-
-    print("Dosya:", len(files))
-
-    for f in files:
-
+    print(f"[BİLGİ] {len(files)} adet Word dosyası bulundu. Dönüştürme başlıyor...")
+    
+    for file in files:
+        doc_path = os.path.join(INPUT_DIR, file)
+        txt_path = os.path.join(OUTPUT_DIR, file.replace(".docx", ".txt"))
+        
         try:
-
-            path = os.path.join(
-                RAW,
-                f
-            )
-
-            text = read_docx(path)
-
-            text = clean_text(text)
-
-            save_txt(
-                f,
-                text
-            )
-
-            print("OK:", f)
-
+            doc = Document(doc_path)
+            full_text = [para.text for para in doc.paragraphs if para.text.strip()]
+            
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(full_text))
+            print(f"-> Başarıyla çevrildi: {file}")
         except Exception as e:
-
-            print("HATA:", f)
-
-            print(e)
-
+            print(f"-> [HATA] {file} işlenirken hata oluştu: {e}")
+            
+    print("\n[AŞAMA 1 TAMAM] Tüm Word dosyaları metne çevrildi.")
 
 if __name__ == "__main__":
-    main()
+    docx_to_text()
+    github_push("Asama 1: DOCX to TEXT pipelinesi eklendi", "scripts/01_clean_docx.py")
